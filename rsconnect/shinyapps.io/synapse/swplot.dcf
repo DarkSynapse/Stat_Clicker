@@ -1,0 +1,12 @@
+name: swplot
+title: swplot
+username: synapse
+account: synapse
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 10712378
+bundleId: 8009846
+url: https://synapse.shinyapps.io/swplot/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE

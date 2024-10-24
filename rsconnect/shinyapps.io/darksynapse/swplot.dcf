@@ -1,0 +1,12 @@
+name: swplot
+title: swplot
+username: darksynapse
+account: darksynapse
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 13117087
+bundleId: 9263348
+url: https://darksynapse.shinyapps.io/swplot/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
