@@ -5,20 +5,6 @@ library(rhandsontable) # load the package
 library(shinydashboard) 
 
 
-# shinyUI(fluidPage(
-#   fluidRow(
-#     titlePanel(title = "ИЗИ СВИМЕР ЕПТА ОТ НИКИТОСИКА!"),
-#     hr(),
-#     mainPanel(plotOutput("plot2")),
-#     column(4,
-#            helpText("Вводите данные"),
-#            rHandsontableOutput("table"),
-#            br())
-#   # ),
-#   # actionButton(inputId="enter",label="enter")
-# 
-# )))
-
 
 shinyUI(dashboardPage(
   dashboardHeader(title = "Stat Clicker"),
