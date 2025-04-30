@@ -1,257 +1,228 @@
+# server.R
+
 library(shiny)
 library(rhandsontable)
 library(dplyr)
 library(ggplot2)
-# library(tidyverse)
+library(tidyr)
+library(forestplot)
+library(grid)  # для gpar()
 
-# swimmer plot function
-sw_plot <- function(my_dt,
-                    OST ,
-                    OST2,
-                    OSS,
-                    OSTF,
-                    OSF,
-                    xax,
-                    yax,
-                    cax) {
-  my_dt$OST <- OST
-  my_dt$OST2 <- OST2
-  my_dt$OSS <- OSS
-  
-  my_dt$OSTF <- OSTF
-  my_dt$OSF <- OSF
-  
-  my_dt$ID <- 1:nrow(my_dt)
-  my_dt <- filter(my_dt, !is.na(OST))
-  my_dt$ID <- factor(my_dt$ID, levels = my_dt$ID[order(my_dt$OST, decreasing = FALSE)])
-  
-  ggplot(my_dt, aes(x = as.factor(ID), OST)) +
-    geom_bar(
-      stat = "identity",
-      width = 0.7,
-      alpha = 1,
-      colour = '#0073C2FF',
-      fill = '#0073C2FF'
-    ) +
-    geom_bar(
-      aes(y = OST2),
-      alpha = 1,
-      stat = "identity",
-      position = "dodge",
-      width = 0.7,
-      colour = '#CD534CFF',
-      fill = '#CD534CFF'
-    ) +
-    geom_point(
-      data = my_dt %>% filter(OSS == 1),
-      aes(x = ID, y = OST + 0.8),
-      pch = 4,
-      size = 2
-    ) +
-    geom_segment(
-      data = my_dt %>% filter(OSS == 0),
-      aes(
-        x = ID,
-        xend = ID,
-        y = OST + 0.7,
-        yend = OST + 1.3
-      ),
-      size = 1,
-      arrow = arrow(type = "closed", length = unit(0.05, "in"))
-    ) +
-    geom_point(aes(x = ID, y = OSTF, col = as.factor(OSF)), size = 2) +
-    coord_flip() +
-    labs(
-      fill = "PFS",
-      colour = cax,
-      shape = "AlloHSCT",
-      x = xax,
-      y = yax
-    ) +
-    theme(
-      legend.title = element_text(size = 14),
-      legend.text = element_text(size = 10),
-      panel.background = element_blank(),
-      axis.ticks.y = element_blank(),
-      axis.text.y = element_blank(),
-      axis.title.x = element_text(
-        color = "black",
-        size = 15,
-        angle = 0,
-        hjust = .5,
-        vjust = .5,
-        face = "plain"
-      ),
-      axis.title.y = element_text(
-        color = "black",
-        size = 15,
-        angle = 90,
-        hjust = .5,
-        vjust = .5,
-        face = "plain"
-      )
-    )
-  
-  
-}
-
-
-
-
-
-
-wf_plot <- function(my_dt, Before, After, Strata, yax, fax, xax) {
-  my_dt$Before
-  my_dt$After
-  my_dt$Strata
-  my_dt$id <-  1:nrow(my_dt)
+# ——— SWIMMER PLOT ————————————————————————————————————————————————
+sw_plot <- function(my_dt, xax, yax, legend_names) {
   
   my_dt <- my_dt %>%
-    dplyr::mutate(Change = Before - After,
-                  ChangePercentage  = ((Change / Before) * 100) * -1)
+    filter(!is.na(Main_time)) %>%
+    mutate(ID = factor(row_number(), levels = row_number()[order(Main_time)]))
   
-  my_dt$id <-
-    factor(my_dt$id, levels = my_dt$id[order(my_dt$ChangePercentage, decreasing = TRUE)])
+  plot_data <- my_dt %>%
+    pivot_longer(cols = c(Main_time, Add_time, Extra_time), names_to = "Type", values_to = "Time")
   
-  my_dt <- filter(my_dt, !is.na(Before))
+  plot_data$Type <- recode(plot_data$Type,
+                           Main_time = legend_names[1],
+                           Add_time = legend_names[2],
+                           Extra_time = legend_names[3])
   
-  ggplot(data = my_dt, aes(x = id, y = ChangePercentage, fill = Strata)) +
-    geom_bar(stat = "identity") +
+  # Цвета для полос
+  custom_colors <- setNames(
+    c('#0073C2FF', '#CD534CFF', '#00A087FF'),
+    legend_names
+  )
+  
+  # Автоматическая генерация цветов для всех уровней Fact_stat
+  fact_levels <- unique(my_dt$Fact_stat)
+  n_levels <- length(fact_levels)
+  
+  # Создаём красивую палитру автоматически
+  fact_colors <- setNames(
+    colorRampPalette(c("darkred", "black", "purple", "blue", "darkgrey"))(n_levels),
+    fact_levels
+  )
+  
+  ggplot(plot_data, aes(x = ID, y = Time, fill = Type)) +
+    geom_bar(stat = "identity", width = 0.7, position = "identity") +
+    
+    geom_point(data = filter(my_dt, Death_1_0 == 1), aes(x = ID, y = Main_time + 0.8), shape = 4, size = 2, inherit.aes = FALSE) +
+    geom_segment(data = filter(my_dt, Death_1_0 == 0),
+                 aes(x = ID, xend = ID, y = Main_time + 0.7, yend = Main_time + 1.3),
+                 size = 1,
+                 arrow = arrow(type = "closed", length = unit(0.05, "in")),
+                 inherit.aes = FALSE) +
+    
+    geom_point(data = my_dt, aes(x = ID, y = Fact_time, color = Fact_stat), size = 1.7, inherit.aes = FALSE) +
+    
+    scale_fill_manual(values = custom_colors) +
+    scale_color_manual(values = fact_colors) +
+    coord_flip() +
+    labs(fill = "", color = "", x = xax, y = yax) +
     theme_classic() +
-    # expand_limits(y=c(-100, 100)) +
-    labs(fill = fax, x = xax, y = yax) +
     theme(
       legend.title = element_text(size = 14),
       legend.text = element_text(size = 10),
-      panel.background = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.title = element_text(color = "black", size = 15)
+    )
+}
+
+# ——— WATERFALL PLOT ———————————————————————————————————————————————
+wf_plot <- function(my_dt, xax, yax, fax) {
+  my_dt <- my_dt %>%
+    filter(!is.na(Before)) %>%
+    mutate(
+      Change = Before - After,
+      ChangePercentage = -100 * Change / Before,
+      id = factor(row_number(), levels = row_number()[order(ChangePercentage, decreasing = TRUE)])
+    )
+  
+  ggplot(my_dt, aes(x = id, y = ChangePercentage, fill = Strata)) +
+    geom_bar(stat = "identity") +
+    labs(fill = fax, x = xax, y = yax) +
+    theme_classic() +
+    theme(
+      legend.title = element_text(size = 14),
+      legend.text = element_text(size = 10),
       axis.ticks.x = element_blank(),
       axis.text.x = element_blank()
     )
-  
 }
 
-
-# Server part
-shinyServer(function(input, output, session) {
-  # Creating dataset for swplot
-  Main_time = rep(25:34, 3)
-  Add_time = rep(10:14, 6)
-  Fact_time = sample(1:30, replace = TRUE)
-  Fact_stat = rep(c("CR", "PR", "SD"), 10)
-  Death_1_0 = rep(rep(1:0, 15))
+# ——— FOREST PLOT (с custom shapes_gp) —————————————————————————————————————————
+forest_plot <- function(my_dt, xticks) {
+  my_dt <- my_dt %>% filter(!is.na(Factor))
+  my_dt$Highlight <- ifelse(is.na(my_dt$Highlight), "Нет", my_dt$Highlight)
   
-  df1 = data.frame(
-    Main_time = Main_time,
-    Add_time = Add_time,
-    Fact_time = Fact_time,
-    Fact_stat = Fact_stat,
-    Death_1_0 = Death_1_0
+  # table text
+  hr_text <- ifelse(
+    is.na(my_dt$Lower) | is.na(my_dt$Upper) | is.na(my_dt$HR),
+    "Reference",
+    paste0(sprintf("%.2f", my_dt$HR),
+           " (", sprintf("%.2f", my_dt$Lower),
+           "-", sprintf("%.2f", my_dt$Upper), ")")
+  )
+  pval_text <- ifelse(
+    is.na(my_dt$pval), "",
+    ifelse(my_dt$pval < 0.001, "< 0.001", sprintf("%.3f", my_dt$pval))
+  )
+  tabletext <- cbind(
+    c("Фактор", my_dt$Factor),
+    c("HR (95% CI)", hr_text),
+    c("p-value", pval_text)
   )
   
+  # numeric values
+  mean_plot  <- c(NA, my_dt$HR)
+  lower_plot <- c(NA, my_dt$Lower)
+  upper_plot <- c(NA, my_dt$Upper)
   
+  # цвета боксов/линий
+  cb <- ifelse(my_dt$Highlight == "Да", "red", "black")
+  lines_gp <- c(list(gpar(col="black")),
+                lapply(cb, function(col) gpar(col=col)))
+  box_gp   <- c(list(gpar(fill="white")),
+                lapply(cb, function(col) gpar(fill=col)))
+  styles   <- fpShapesGp(lines=lines_gp, box=box_gp)
   
-  datavalues <- reactiveValues(data = df1)
+  forestplot(
+    labeltext  = tabletext,
+    mean       = mean_plot,
+    lower      = lower_plot,
+    upper      = upper_plot,
+    zero       = 1,
+    xlog       = TRUE,
+    shapes_gp  = styles,
+    clip       = range(xticks),
+    xticks     = xticks,
+    boxsize    = 0.2,
+    lineheight = unit(1.2, "cm"),
+    graphwidth = unit(6, "cm"),
+    txt_gp     = fpTxtGp(
+      label = gpar(cex=0.9),
+      ticks = gpar(cex=0.8),
+      xlab  = gpar(cex=1),
+      title = gpar(cex=1.2)
+    )
+  )
+}
+
+# ——— SHINY SERVER ———————————————————————————————————————————————
+shinyServer(function(input, output, session) {
   
-  # returns rhandsontable type object - editable excel type grid data
-  output$table <- renderRHandsontable({
-    rhandsontable(df1, readOnly = FALSE)
+  set.seed(123)
+  n <- 50
+  df1 <- data.frame(
+    Main_time = sample(20:60, n, replace = TRUE),
+    Add_time  = sample(5:30,  n, replace = TRUE),
+    Extra_time= sample(5:25,  n, replace = TRUE),
+    Fact_time = sample(1:60,  n, replace = TRUE),
+    Fact_stat = sample(c("CR","PR","SD","PD"), n, replace = TRUE),
+    Death_1_0 = sample(c(0,1),    n, replace = TRUE)
+  )
+  dfwf <- data.frame(
+    Before = sample(20:80, n, replace = TRUE),
+    After  = sample(10:70, n, replace = TRUE),
+    Strata = sample(c("Nivo","BV","Chemo"), n, replace = TRUE)
+  )
+  df_forest <- data.frame(
+    Factor    = c("Возраст <60 (Ref)","Возраст ≥60","Пол: Мужчины (Ref)","Пол: Женщины", rep(NA,11)),
+    HR        = c(1,1.75,1,0.85, rep(NA,11)),
+    Lower     = c(NA,1.10,NA,0.60, rep(NA,11)),
+    Upper     = c(NA,2.80,NA,1.20, rep(NA,11)),
+    pval      = c(NA,0.02,NA,0.40, rep(NA,11)),
+    Highlight = c(NA,"Да",NA,"Нет",   rep(NA,11)),
+    stringsAsFactors = FALSE
+  )
+  
+  rv  <- reactiveValues(data = df1)
+  rv2 <- reactiveValues(data = dfwf)
+  rv3 <- reactiveValues(data = df_forest)
+  
+  # Swimmer table
+  output$table  <- renderRHandsontable({ rhandsontable(rv$data) })
+  observeEvent(input$table$changes$changes, { rv$data <- hot_to_r(input$table) })
+  
+  # Waterfall table
+  output$table2 <- renderRHandsontable({ rhandsontable(rv2$data) })
+  observeEvent(input$table2$changes$changes, { rv2$data <- hot_to_r(input$table2) })
+  
+  # Forest table (dropdown for Highlight)
+  output$table3 <- renderRHandsontable({
+    rhandsontable(rv3$data) %>%
+      hot_col("Highlight", type="dropdown", source=c("Да","Нет"))
   })
+  observeEvent(input$table3$changes$changes, { rv3$data <- hot_to_r(input$table3) })
   
-  # on click of button the file will be saved to the working directory
+  # Plots
+  output$plot2 <- renderPlot({
+    req(input$text1, input$text2, input$text4, input$text5, input$text6)
+    sw_plot(rv$data,
+            xax = input$text1,
+            yax = input$text2,
+            legend_names = c(input$text4, input$text5, input$text6))
+  }, width = reactive(input$width), height = reactive(input$height), res = 96)
   
-  observeEvent(input$table$changes$changes, # observe if any changes to the cells of the rhandontable
-               {
-                 datavalues$data <- hot_to_r(input$table) # convert the rhandontable to R data frame object so manupilation / calculations could be done
-                 
-               })
+  output$wf_plot <- renderPlot({
+    req(input$wf_text1, input$wf_text2, input$wf_text3)
+    wf_plot(rv2$data,
+            xax = input$wf_text1,
+            yax = input$wf_text2,
+            fax = input$wf_text3)
+  }, width = reactive(input$wf_width), height = reactive(input$wf_height), res = 96)
   
+  output$forest_plot <- renderPlot({
+    req(input$xticks_forest)
+    xt <- as.numeric(strsplit(input$xticks_forest, ",")[[1]])
+    forest_plot(rv3$data, xticks = xt)
+  }, width = reactive(input$forest_width), height = reactive(input$forest_height), res = 96)
   
-  # Creating dataset for WFplot
-  Before = rep(25:34, 6)
-  After = rep(20:49, 2)
-  Strata  = rep(c("Nivo", "BV", "Chemo"), 20)
-  dfwf <- data.frame(Before, After, Strata)
-  
-  
-  datavalues_wf <- reactiveValues(data = dfwf)
-  
-  
-  output$table2 <- renderRHandsontable({
-    rhandsontable(dfwf, readOnly = FALSE)
-  })
-  
-  
-  
-  observeEvent(input$table2$changes$changes, # observe if any changes to the cells of the rhandontable
-               {
-                 datavalues_wf$data <- hot_to_r(input$table2) # convert the rhandontable to R data frame object so manupilation / calculations could be done
-                 
-               })
-  
-  
+  # Sidebar menu
   output$menu <- renderMenu({
     sidebarMenu(
-      menuItem(
-        "Swimmer plot",
-        icon = icon("line-chart"),
-        tabName = "dashboard"
-      ),
-      menuItem(
-        "Waterfall plot",
-        icon = icon("line-chart"),
-        tabName = "wf_tab"
-      ),
-      menuItem("Помощь", tabName = "widgets", icon = icon("info")),
-      menuItem("О проекте", icon = icon("user"), tabName = "author")
+      menuItem("Swimmer plot",   tabName="dashboard", icon=icon("chart-bar")),
+      menuItem("Waterfall plot", tabName="wf_tab",    icon=icon("chart-bar")),
+      menuItem("Forest plot",    tabName="forest_tab",icon=icon("chart-bar")),
+      menuItem("Помощь",         tabName="widgets",   icon=icon("info")),
+      menuItem("О проекте",      tabName="author",    icon=icon("user"))
     )
-    
   })
-  
-  # Render swplot
-  output$plot2 <- renderPlot(
-    width = function()
-      input$width,
-    height = function()
-      input$height,
-    res = 96,
-    
-    {
-      sw_plot(
-        my_dt = datavalues$data,
-        OST  = datavalues$data$Main_time,
-        OST2 = datavalues$data$Add_time,
-        OSS  = datavalues$data$Death_1_0,
-        OSTF = datavalues$data$Fact_time,
-        OSF  = datavalues$data$Fact_stat,
-        xax = req(input$text1),
-        yax = req(input$text2),
-        cax = req(input$text3)
-      )
-      
-    }
-  )
-  
-  # Render wfplot
-  output$wf_plot <- renderPlot(
-    width = function()
-      input$wf_width,
-    height = function()
-      input$wf_height,
-    res = 96,
-    
-    {
-      wf_plot(
-        my_dt = datavalues_wf$data,
-        Before = datavalues_wf$data$Before,
-        After = datavalues_wf$data$After,
-        Strata = datavalues_wf$data$Strata,
-        xax = req(input$wf_text1),
-        yax = req(input$wf_text2),
-        fax = req(input$wf_text3)
-      )
-      
-    }
-  )
-  
-  
 })
